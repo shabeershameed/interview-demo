@@ -1,0 +1,138 @@
+$(function () {
+    const $taskList = $('#task-list');
+    const $form = $('#task-form');
+    const $submitButton = $('#submit-task');
+    const $statusSelect = $('#status');
+    const $prioritySelect = $('#priority');
+
+    function badgeClass(value) {
+        return String(value).trim().toLowerCase().replace(/\s+/g, '-');
+    }
+
+    function renderTasks(tasks) {
+        if (!tasks.length) {
+            $taskList.html('<div class="empty-state">No tasks yet. Create your first task above.</div>');
+            return;
+        }
+
+        $taskList.empty();
+
+        tasks.forEach(task => {
+            const card = $(`
+                <div class="task-card" data-id="${task.id}">
+                    <div class="task-top">
+                        <h3 class="task-title">${task.title}</h3>
+                        <span class="badge ${badgeClass(task.priority)}">${task.priority}</span>
+                    </div>
+                    <div class="task-meta">
+                        <strong>Status:</strong> <span class="badge ${badgeClass(task.status)}">${task.status}</span>
+                    </div>
+                    <div class="task-meta"><strong>Assigned to:</strong> ${task.assigned_to}</div>
+                    <div class="task-meta"><strong>Created:</strong> ${new Date(task.created_at).toLocaleString()}</div>
+                    <p>${task.description || 'No description provided.'}</p>
+                    <div class="task-actions">
+                        <button class="secondary update-task" data-id="${task.id}">Update</button>
+                        <button class="danger delete-task" data-id="${task.id}">Delete</button>
+                    </div>
+                </div>
+            `);
+            $taskList.append(card);
+        });
+    }
+
+    function fetchTasks() {
+        $.ajax({
+            url: '/api/tasks',
+            method: 'GET',
+            success: function (tasks) {
+                renderTasks(tasks);
+            },
+            error: function () {
+                alert('Failed to load tasks.');
+            }
+        });
+    }
+
+    function resetForm() {
+        $form[0].reset();
+        $statusSelect.val('Open');
+        $prioritySelect.val('Medium');
+        $submitButton.text('Add Task');
+        $submitButton.removeData('editingId');
+    }
+
+    $form.on('submit', function (event) {
+        event.preventDefault();
+
+        const formData = {
+            title: $('#title').val(),
+            description: $('#description').val(),
+            status: $('#status').val(),
+            priority: $('#priority').val(),
+            assigned_to: $('#assigned_to').val()
+        };
+
+        const editingId = $submitButton.data('editingId');
+        const method = editingId ? 'PUT' : 'POST';
+        const url = editingId ? `/api/tasks/${editingId}` : '/api/tasks';
+
+        $.ajax({
+            url: url,
+            method: method,
+            contentType: 'application/json',
+            data: JSON.stringify(formData),
+            success: function () {
+                resetForm();
+                fetchTasks();
+            },
+            error: function (xhr) {
+                const message = xhr.responseJSON && xhr.responseJSON.detail ? xhr.responseJSON.detail : 'Request failed.';
+                alert(message);
+            }
+        });
+    });
+
+    $(document).on('click', '.delete-task', function () {
+        const id = $(this).data('id');
+        if (!confirm('Delete this task?')) return;
+
+        $.ajax({
+            url: `/api/tasks/${id}`,
+            method: 'DELETE',
+            success: function () {
+                fetchTasks();
+            },
+            error: function () {
+                alert('Could not delete task.');
+            }
+        });
+    });
+
+    $(document).on('click', '.update-task', function () {
+        const id = $(this).data('id');
+        $.ajax({
+            url: '/api/tasks',
+            method: 'GET',
+            success: function (tasks) {
+                const task = tasks.find(item => item.id === id);
+                if (!task) return;
+
+                $('#title').val(task.title);
+                $('#description').val(task.description);
+                $('#status').val(task.status);
+                $('#priority').val(task.priority);
+                $('#assigned_to').val(task.assigned_to);
+
+                $submitButton.text('Save Changes');
+                $submitButton.data('editingId', id);
+                $('html, body').animate({ scrollTop: 0 }, 'slow');
+            }
+        });
+    });
+
+    $('#reset-form').on('click', function () {
+        resetForm();
+    });
+
+    fetchTasks();
+});
